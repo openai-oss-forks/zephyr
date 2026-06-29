@@ -38,6 +38,12 @@ config ARMV7_A
 	select ATOMIC_OPERATIONS_BUILTIN
 	select ISA_ARM
 
+config ARMV7_A_NS
+	bool "ARMv7-A Non-Secure state (Non-secure world of TrustZone)"
+	depends on ARMV7_A
+	help
+	  Zephyr is running in ARM TrustZone Non-Secure state on an ARMv7-A core.
+
 config ARMV7_EXCEPTION_STACK_SIZE
 	int "Undefined Instruction and Abort stack size (in bytes)"
 	default 256
