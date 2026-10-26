@@ -16,6 +16,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/kernel_structs.h>
 #include <kernel_arch_interface.h>
+#include <kernel_internal.h>
 #include <ipi.h>
 #include <zephyr/init.h>
 #include <zephyr/arch/arm64/mm.h>
@@ -25,6 +26,7 @@
 #include <zephyr/arch/arch_interface.h>
 #include <zephyr/platform/hooks.h>
 #include <zephyr/sys/barrier.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/irq.h>
 #include "boot.h"
 
@@ -33,6 +35,9 @@
 #define SGI_SCHED_IPI	0
 #define SGI_MMCFG_IPI	1
 #define SGI_FPU_IPI	2
+#ifdef CONFIG_SMP_FATAL_HALT
+#define SGI_FATAL_HALT_IPI 3
+#endif
 
 struct boot_params {
 	uint64_t mpid;
@@ -62,6 +67,30 @@ BUILD_ASSERT(ARRAY_SIZE(cpu_node_list) == DT_CHILD_NUM_STATUS_OKAY(DT_PATH(cpus)
 static uint64_t cpu_map[CONFIG_MP_MAX_NUM_CPUS] = {
 	[0 ... (CONFIG_MP_MAX_NUM_CPUS - 1)] = INV_MPID
 };
+
+#ifdef CONFIG_SMP_FATAL_HALT
+static atomic_t fatal_halt_ready;
+
+BUILD_ASSERT(CONFIG_MP_MAX_NUM_CPUS <= 32 && CONFIG_MP_MAX_NUM_CPUS <= ATOMIC_BITS,
+	     "CPU count exceeds fatal-halt bitmap width");
+
+static void fatal_halt_ipi_handler(const void *unused)
+{
+	ARG_UNUSED(unused);
+	z_fatal_halt_check();
+}
+
+static void fatal_halt_init(void)
+{
+	/* Configure this CPU's SGI after GIC initialization. */
+	IRQ_CONNECT(SGI_FATAL_HALT_IPI, 0, fatal_halt_ipi_handler, NULL, 0);
+	irq_enable(SGI_FATAL_HALT_IPI);
+
+	/* Publish readiness before checking for a concurrent halt. */
+	atomic_set_bit(&fatal_halt_ready, arch_curr_cpu()->id);
+	z_fatal_halt_check();
+}
+#endif
 
 /* Called from Zephyr initialization */
 void arch_cpu_start(int cpu_num, k_thread_stack_t *stack, int sz,
@@ -129,7 +158,9 @@ void arch_cpu_start(int cpu_num, k_thread_stack_t *stack, int sz,
 		wfe();
 	}
 
+#ifndef CONFIG_SMP_FATAL_HALT
 	cpu_map[cpu_num] = cpu_mpid;
+#endif
 
 	printk("Secondary CPU core %d (MPID:%#llx) is up\n", cpu_num, cpu_mpid);
 }
@@ -154,6 +185,12 @@ FUNC_NORETURN void arch_secondary_cpu_init(void)
 
 #ifdef CONFIG_SMP
 	arm_gic_secondary_init();
+
+#ifdef CONFIG_SMP_FATAL_HALT
+	/* Publish the target before marking this CPU ready. */
+	cpu_map[cpu_num] = MPIDR_TO_CORE(GET_MPIDR());
+	fatal_halt_init();
+#endif
 
 	irq_enable(SGI_SCHED_IPI);
 #ifdef CONFIG_USERSPACE
@@ -211,6 +248,14 @@ static void send_ipi(unsigned int ipi, uint32_t cpu_bitmap)
 		gic_raise_sgi(ipi, target_mpidr, 1 << aff0);
 	}
 }
+
+#ifdef CONFIG_SMP_FATAL_HALT
+void arch_fatal_halt_peers(void)
+{
+	/* Late CPUs check the halt state during startup. */
+	send_ipi(SGI_FATAL_HALT_IPI, (uint32_t)atomic_get(&fatal_halt_ready));
+}
+#endif
 
 void sched_ipi_handler(const void *unused)
 {
@@ -296,6 +341,10 @@ void arch_spin_relax(void)
 int arch_smp_init(void)
 {
 	cpu_map[0] = MPIDR_TO_CORE(GET_MPIDR());
+
+#ifdef CONFIG_SMP_FATAL_HALT
+	fatal_halt_init();
+#endif
 
 	/*
 	 * SGI0 is use for sched ipi, this might be changed to use Kconfig

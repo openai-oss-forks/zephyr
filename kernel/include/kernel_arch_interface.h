@@ -267,6 +267,15 @@ int arch_thread_priv_stack_space_get(const struct k_thread *thread, size_t *stac
 /** Halt the system, optionally propagating a reason code */
 FUNC_NORETURN void arch_system_halt(unsigned int reason);
 
+#ifdef CONFIG_SMP_FATAL_HALT
+/**
+ * Request local peer halts without waiting. The caller holds local IRQs off.
+ * Must tolerate uninitialized CPUs; late CPUs must check the halt state.
+ * Peers must not report errors or call arch_system_halt().
+ */
+void arch_fatal_halt_peers(void);
+#endif
+
 /** @} */
 
 

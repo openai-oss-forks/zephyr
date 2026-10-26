@@ -28,6 +28,13 @@ extern "C" {
 /* Initialize per-CPU kernel data */
 void z_init_cpu(int id);
 
+#ifdef CONFIG_SMP_FATAL_HALT
+/**
+ * Halt locally if another CPU is halting. Call from an ISR or CPU startup.
+ */
+void z_fatal_halt_check(void);
+#endif
+
 /* Initialize a thread */
 void z_init_thread_base(struct _thread_base *thread_base, int priority,
 			uint32_t initial_state, unsigned int options);
