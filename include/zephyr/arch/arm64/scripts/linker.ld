@@ -136,6 +136,9 @@ SECTIONS
         *(.text)
         *(".text.*")
         *(.gnu.linkonce.t.*)
+        /* libc++ replacement operators must stay inside the text MMU mapping. */
+        *(__lcxx_override)
+        *(__lcxx_override.*)
 
 #include <snippets-text-sections.ld>
 
