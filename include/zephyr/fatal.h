@@ -32,6 +32,10 @@ extern "C" {
  * Invokes architecture-specific code to power off or halt the system in
  * a low power state. Lacking that, lock interrupts and sit in an idle loop.
  *
+ * With @kconfig{CONFIG_SMP_FATAL_HALT}, also requests other CPUs to halt.
+ * Complete reporting first: stopped CPUs may hold locks. Peer halts are
+ * best effort; CPUs with interrupts masked may not stop.
+ *
  * @param reason Fatal exception reason code
  */
 FUNC_NORETURN void k_fatal_halt(unsigned int reason);
@@ -51,6 +55,7 @@ FUNC_NORETURN void k_fatal_halt(unsigned int reason);
  *
  * A few notes for custom implementations:
  *
+ * - A terminal policy should finish reporting before calling k_fatal_halt().
  * - If the error is determined to be unrecoverable, LOG_PANIC() should be
  *   invoked to flush any pending logging buffers.
  * - K_ERR_KERNEL_PANIC indicates a severe unrecoverable error in the kernel

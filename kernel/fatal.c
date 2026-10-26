@@ -8,6 +8,7 @@
 
 #include <kernel_internal.h>
 #include <zephyr/sys/__assert.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/arch/cpu.h>
 #include <zephyr/arch/exception.h>
 #include <zephyr/logging/log_ctrl.h>
@@ -18,14 +19,42 @@
 
 LOG_MODULE_DECLARE(os, CONFIG_KERNEL_LOG_LEVEL);
 
+#ifdef CONFIG_SMP_FATAL_HALT
+static atomic_t fatal_halting_cpu = ATOMIC_INIT(-1);
+
+static FUNC_NORETURN void fatal_halt_cpu(void)
+{
+	(void)arch_irq_lock();
+	for (;;) {
+		/* Match the system-halt fallback without powering off the system. */
+	}
+}
+
+void z_fatal_halt_check(void)
+{
+	atomic_val_t cpu = atomic_get(&fatal_halting_cpu);
+
+	if ((cpu != -1) && (cpu != arch_curr_cpu()->id)) {
+		fatal_halt_cpu();
+	}
+}
+
+static void fatal_halt_other_cpus(void)
+{
+	(void)arch_irq_lock();
+	if (!atomic_cas(&fatal_halting_cpu, -1, arch_curr_cpu()->id)) {
+		/* Recursive calls also halt locally. */
+		fatal_halt_cpu();
+	}
+
+	arch_fatal_halt_peers();
+}
+#endif
+
 /* LCOV_EXCL_START */
 FUNC_NORETURN __weak void arch_system_halt(unsigned int reason)
 {
 	ARG_UNUSED(reason);
-
-	/* TODO: What's the best way to totally halt the system if SMP
-	 * is enabled?
-	 */
 
 	(void)arch_irq_lock();
 	for (;;) {
@@ -46,7 +75,7 @@ __weak void k_sys_fatal_error_handler(unsigned int reason,
 	sys_reboot(SYS_REBOOT_WARM);
 #else
 	EXCEPTION_DUMP("Halting system");
-	arch_system_halt(reason);
+	k_fatal_halt(reason);
 #endif /* CONFIG_RESET_ON_FATAL_ERROR */
 
 	CODE_UNREACHABLE;
@@ -85,6 +114,9 @@ static const char *reason_to_str(unsigned int reason)
 /* LCOV_EXCL_START */
 FUNC_NORETURN void k_fatal_halt(unsigned int reason)
 {
+#ifdef CONFIG_SMP_FATAL_HALT
+	fatal_halt_other_cpus();
+#endif
 	arch_system_halt(reason);
 }
 /* LCOV_EXCL_STOP */

@@ -10,6 +10,13 @@ config SMP
 	  When true, kernel will be built with SMP support, allowing
 	  more than one CPU to schedule Zephyr tasks at a time.
 
+config SMP_FATAL_HALT
+	bool "Halt other CPUs on a fatal system halt"
+	depends on SMP && ARM64 && GIC && !ARM_CUSTOM_INTERRUPT_CONTROLLER
+	help
+	  Make k_fatal_halt() request other CPUs to halt before halting locally.
+	  Peer stops are best effort; masked interrupts can prevent stopping.
+
 config MP_MAX_NUM_CPUS
 	int "Maximum number of CPUs/cores"
 	default 1

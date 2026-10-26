@@ -123,6 +123,19 @@ If the implementation returns, the faulting thread will be aborted and
 the system will otherwise continue to function. See the documentation for
 this function for additional details and constraints.
 
+Terminal Halts on SMP Systems
+=============================
+
+With :kconfig:option:`CONFIG_SMP_FATAL_HALT`, :c:func:`k_fatal_halt` requests
+other Zephyr CPUs to halt before halting locally. Custom fatal handlers should
+complete reporting and ``LOG_PANIC()`` before calling it, since stopped CPUs
+may hold locks.
+
+Peer stops are best effort: masked interrupts can prevent stopping. This halt
+mechanism does not capture multi-CPU coredumps. The ARM64 implementation uses
+priority-0 SGI 4 with the standard GIC; late-starting CPUs check the halt state.
+CPU resume paths must restore the SGI state and check for a halt before resuming.
+
 API Reference
 *************
 
