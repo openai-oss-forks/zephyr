@@ -279,6 +279,12 @@ do {                                                                    \
 #endif
 #endif
 
+#if defined(CONFIG_NATIVE_BUILD) && defined(CONFIG_EXTERNAL_LIBC) && \
+	!defined(_ASMLANGUAGE) && !defined(_LINKER)
+/* Parse host pthread types before the __unused annotation can replace a glibc field. */
+#include <pthread.h>
+#endif
+
 #define __used		__attribute__((__used__))
 #define __unused	__attribute__((__unused__))
 #define __maybe_unused	__attribute__((__unused__))
