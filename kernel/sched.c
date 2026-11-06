@@ -528,7 +528,14 @@ int z_pend_curr(struct k_spinlock *lock, k_spinlock_key_t key,
 	 * in every build rather than degrading into the corruption traced in
 	 * #111518. Placed first so the refusal performs no side effect.
 	 */
-	if (arch_is_in_isr()) {
+#if defined(CONFIG_ARM64) && defined(CONFIG_SMP)
+	/* The caller's spinlock keeps IRQs masked and this CPU stable. */
+	bool in_isr = arch_curr_cpu()->nested != 0U;
+#else
+	bool in_isr = arch_is_in_isr();
+#endif
+
+	if (in_isr) {
 		__ASSERT(false, "blocking pend from ISR context");
 		k_panic();
 	}
