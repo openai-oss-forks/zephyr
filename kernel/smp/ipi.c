@@ -237,8 +237,19 @@ void signal_pending_ipi(void)
 
 #if defined(CONFIG_SCHED_IPI_SUPPORTED)
 	if (arch_num_cpus() > 1) {
+		/* Keep unknown bits on the original clearing path. */
+		atomic_val_t pending = atomic_get(&_kernel.pending_ipi);
+
+		if (pending == 0) {
+			return;
+		}
+
 		uint32_t self_bit = BIT(_current_cpu->id);
 		uint32_t cpu_bitmap;
+
+		if (pending == (atomic_val_t)self_bit) {
+			return;
+		}
 
 		cpu_bitmap = (uint32_t)atomic_and(&_kernel.pending_ipi,
 						  (atomic_val_t)self_bit);
